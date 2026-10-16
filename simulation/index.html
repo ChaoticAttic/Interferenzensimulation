@@ -1,0 +1,648 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101614">
+  <title>Wellenlabor – Interferenz zweier Punktquellen</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #101614;
+      --panel: #18211e;
+      --line: #34413a;
+      --muted: #a5b0a8;
+      --paper: #edf1e8;
+      --mint: #8ee0b0;
+      --coral: #ff956d;
+      --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+      min-height: 100vh;
+      color: var(--paper);
+      background-color: var(--bg);
+      background-image: radial-gradient(ellipse at 12% 0%, #29352d 0, transparent 36%),
+        linear-gradient(135deg, transparent 48%, #1a241f 48.1%, transparent 48.35%);
+      font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+    }
+
+    button, input { font: inherit; }
+
+    .shell {
+      width: min(1440px, 100%);
+      margin: 0 auto;
+      padding: 30px clamp(18px, 4vw, 58px) 36px;
+    }
+
+    .masthead {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding-bottom: 25px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .brand, .live-state, .eyebrow, .readout-label, .control-heading, .control-value {
+      font-family: var(--mono);
+      text-transform: uppercase;
+      letter-spacing: .08em;
+    }
+
+    .brand { color: var(--mint); font-size: 12px; }
+    .live-state { color: var(--muted); font-size: 11px; }
+    .live-state::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 9px; border-radius: 50%; background: var(--mint); }
+
+    .intro { padding: 27px 0 25px; }
+    .eyebrow { margin: 0 0 9px; color: var(--coral); font-size: 11px; }
+    h1 { margin: 0; font: 400 clamp(32px, 5vw, 52px)/1.08 Georgia, "Times New Roman", serif; }
+    .subtitle { max-width: 680px; margin: 10px 0 0; color: var(--muted); font-size: 15px; line-height: 1.55; }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(0, 1.7fr) minmax(290px, .8fr);
+      align-items: start;
+      gap: 24px;
+    }
+
+    .visualization { min-width: 0; }
+    .stage {
+      position: relative;
+      overflow: hidden;
+      aspect-ratio: 16 / 10;
+      min-height: 290px;
+      border: 1px solid #39473e;
+      background: #0b1211;
+    }
+
+    canvas { display: block; width: 100%; height: 100%; }
+    .stage-label {
+      position: absolute;
+      top: 15px;
+      left: 16px;
+      color: #d5ded6;
+      font: 10px var(--mono);
+      letter-spacing: .07em;
+      pointer-events: none;
+    }
+
+    .legend {
+      position: absolute;
+      right: 15px;
+      bottom: 14px;
+      display: flex;
+      gap: 13px;
+      color: #d5ded6;
+      font: 10px var(--mono);
+      pointer-events: none;
+    }
+    .legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .legend i { width: 14px; height: 0; border-top: 2px solid; }
+    .legend .crest, .legend .belly { border-color: var(--mint); }
+    .legend .trough, .legend .node { border-color: var(--coral); }
+    .legend .trough { border-top-style: dashed; }
+    .legend .node { border-top-style: dotted; }
+
+    .equation {
+      overflow-wrap: anywhere;
+      margin: 13px 0 0;
+      color: #c6d0c8;
+      font: 12px/1.6 var(--mono);
+    }
+
+    .readouts {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      margin-top: 20px;
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+    }
+    .readout { padding: 14px 12px 14px 0; }
+    .readout + .readout { padding-left: 16px; border-left: 1px solid var(--line); }
+    .readout-label { display: block; margin-bottom: 7px; color: var(--muted); font-size: 9px; }
+    .readout output { font: 15px var(--mono); }
+
+    .controls {
+      overflow: hidden;
+      border: 1px solid var(--line);
+      background: color-mix(in srgb, var(--panel) 88%, transparent);
+    }
+    .controls-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--line);
+    }
+    .controls-header h2 { margin: 0; font: 17px Georgia, "Times New Roman", serif; }
+    .control-heading { margin: 0; color: var(--mint); font-size: 10px; }
+    .source-list { display: grid; }
+    .source { padding: 15px 18px 17px; border-bottom: 1px solid var(--line); --source-color: var(--mint); }
+    .source-heading { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+    .source-title { display: flex; flex: 1; align-items: center; gap: 9px; margin: 0; font-size: 13px; font-weight: 600; }
+    .source-dot { width: 10px; height: 10px; border: 2px solid var(--source-color); border-radius: 50%; }
+    .source-action { min-height: 29px; padding: 0 8px; border: 1px solid #46544a; border-radius: 3px; color: #dce5dd; background: #202a24; cursor: pointer; font-size: 10px; }
+    .source-action:hover { background: #2c3a31; }
+    .source-action.remove { min-width: 29px; padding: 0; font-size: 15px; }
+    .source.is-muted .source-title { color: var(--muted); }
+    .source.is-muted .source-dot { opacity: .35; }
+    .source input[type="range"] { accent-color: var(--source-color); }
+    .add-source { width: calc(100% - 36px); min-height: 37px; margin: 14px 18px; border: 1px dashed #586a5d; border-radius: 3px; color: #c6f4d3; background: transparent; cursor: pointer; font-size: 12px; }
+    .add-source:hover { background: #222d27; }
+    .slider-row + .slider-row { margin-top: 16px; }
+    .slider-label { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 8px; color: #d4ddd5; font-size: 12px; }
+    .control-value { color: var(--paper); font-size: 10px; white-space: nowrap; }
+    input[type="range"] { display: block; width: 100%; height: 16px; margin: 0; accent-color: var(--mint); cursor: pointer; }
+    .source-two input[type="range"] { accent-color: var(--coral); }
+
+    .shared-controls { padding: 17px 18px 18px; }
+    .shared-controls .control-heading { margin-bottom: 17px; }
+    .transport {
+      display: flex;
+      gap: 9px;
+      padding: 0 18px 18px;
+    }
+    .transport button {
+      display: inline-flex;
+      min-height: 40px;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 0 13px;
+      border: 1px solid #536157;
+      border-radius: 3px;
+      color: var(--paper);
+      background: #222d27;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .transport button:first-child { flex: 1; border-color: #64816c; color: #c6f4d3; }
+    .transport button:hover { background: #2c3a31; }
+    .transport button:focus-visible, input:focus-visible { outline: 2px solid var(--coral); outline-offset: 3px; }
+    .button-icon { font-family: var(--mono); }
+
+    @media (max-width: 850px) {
+      .workspace { grid-template-columns: 1fr; }
+      .controls { display: grid; grid-template-columns: 1fr 1fr; }
+      .controls-header, .source-list, .add-source, .shared-controls, .transport { grid-column: 1 / -1; }
+      .source-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .source { border-right: 1px solid var(--line); }
+      .source:nth-child(2n) { border-right: 0; }
+    }
+
+    @media (max-width: 560px) {
+      .shell { padding: 19px 15px 25px; }
+      .masthead { padding-bottom: 17px; }
+      .intro { padding: 22px 0 19px; }
+      .workspace { gap: 18px; }
+      .stage { min-height: 230px; }
+      .controls { display: block; }
+      .source-list { grid-template-columns: 1fr; }
+      .source { border-right: 0; }
+      .readout { padding-right: 6px; }
+      .readout + .readout { padding-left: 9px; }
+      .readout-label { font-size: 8px; }
+      .readout output { font-size: 12px; }
+      .legend { gap: 8px; font-size: 9px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="masthead">
+      <div class="brand">Wellenlabor <span aria-hidden="true">/</span> 01</div>
+      <div class="live-state" id="run-state" aria-live="polite">Simulation läuft</div>
+    </header>
+
+    <section class="intro" aria-labelledby="page-title">
+      <p class="eyebrow">Superposition · 2D-Wellenfeld</p>
+      <h1 id="page-title">Punktquellen im Wellenfeld</h1>
+      <p class="subtitle">Beobachte die Überlagerung von Kreiswellen. Ändere Amplitude, Phase und Position der Quellen und verfolge, wie sich das Interferenzmuster verschiebt.</p>
+    </section>
+
+    <div class="workspace">
+      <section class="visualization" aria-label="Wellenfeld und Messwerte">
+        <div class="stage">
+          <canvas id="wave-canvas" aria-label="Animierte Darstellung des Interferenzmusters zweier Punktquellen"></canvas>
+          <div class="stage-label">Wellenfeld · Wellenfronten &amp; Interferenz</div>
+          <div class="legend" aria-label="Linienlegende">
+            <span><i class="crest"></i> Berg</span>
+            <span><i class="trough"></i> Tal</span>
+            <span><i class="node"></i> Knoten</span>
+            <span><i class="belly"></i> Bauch</span>
+          </div>
+        </div>
+        <p class="equation">u(x,y,t) = ∑ᵢ Aᵢ sin(krᵢ − ωt + φᵢ)</p>
+        <div class="readouts" aria-label="Aktuelle Messwerte">
+          <div class="readout"><span class="readout-label">Zeit</span><output id="time-value">0,00 s</output></div>
+          <div class="readout"><span class="readout-label">Wellenlänge</span><output id="wavelength-value">—</output></div>
+          <div class="readout"><span class="readout-label">Aktive Quellen</span><output id="source-count">2</output></div>
+        </div>
+      </section>
+
+      <aside class="controls" aria-label="Simulationsparameter">
+        <div class="controls-header">
+          <h2>Parameter</h2>
+          <span class="control-heading">Einstellungen</span>
+        </div>
+        <div class="source-list" id="source-list" aria-label="Punktquellen"></div>
+        <button class="add-source" id="add-source" type="button">+ Quelle hinzufügen</button>
+
+        <section class="shared-controls" aria-labelledby="shared-title">
+          <h3 class="control-heading" id="shared-title">Gemeinsame Eigenschaften</h3>
+          <div class="slider-row">
+            <label class="slider-label" for="frequency">Frequenz <output class="control-value" id="frequency-value">0,80 Hz</output></label>
+            <input id="frequency" type="range" min="0.25" max="1.5" step="0.05" value="0.8">
+          </div>
+          <div class="slider-row">
+            <label class="slider-label" for="speed">Animation <output class="control-value" id="speed-value">1,00×</output></label>
+            <input id="speed" type="range" min="0.25" max="2.5" step="0.05" value="1">
+          </div>
+        </section>
+
+        <div class="transport">
+          <button id="play-button" type="button" aria-pressed="true"><span class="button-icon" aria-hidden="true">Ⅱ</span><span>Pause</span></button>
+          <button id="reset-button" type="button" aria-label="Simulation zurücksetzen"><span class="button-icon" aria-hidden="true">↺</span><span>Zurücksetzen</span></button>
+        </div>
+      </aside>
+    </div>
+  </main>
+
+  <script>
+    (() => {
+      const canvas = document.querySelector("#wave-canvas");
+      const context = canvas.getContext("2d", { alpha: false });
+      const stage = canvas.parentElement;
+      const stateLabel = document.querySelector("#run-state");
+      const playButton = document.querySelector("#play-button");
+      const timeOutput = document.querySelector("#time-value");
+      const wavelengthOutput = document.querySelector("#wavelength-value");
+      const sourceCountOutput = document.querySelector("#source-count");
+      const sourceList = document.querySelector("#source-list");
+      const addSourceButton = document.querySelector("#add-source");
+      const controls = {
+        frequency: document.querySelector("#frequency"),
+        speed: document.querySelector("#speed")
+      };
+      const sourceColors = ["#8ee0b0", "#ff956d", "#83c8ff", "#f1d477", "#d5a5ff", "#ff91b8"];
+      const sources = [
+        { id: 1, x: 0.35, y: 0.5, amplitude: 0.8, phase: 0, muted: false },
+        { id: 2, x: 0.65, y: 0.5, amplitude: 0.8, phase: 0, muted: false }
+      ];
+
+      let width = 0;
+      let height = 0;
+      let elapsed = 0;
+      let previousFrame = 0;
+      let playing = true;
+      let nextSourceId = 3;
+      let draggedSource = null;
+
+      const number = (value, digits = 2) => Number(value).toFixed(digits).replace(".", ",");
+      const read = (control) => Number(control.value);
+      const sourceColor = (source) => sourceColors[(source.id - 1) % sourceColors.length];
+
+      function updateLabels() {
+        document.querySelector("#frequency-value").textContent = `${number(read(controls.frequency))} Hz`;
+        document.querySelector("#speed-value").textContent = `${number(read(controls.speed))}×`;
+        wavelengthOutput.textContent = `${number(propagationSpeed() / read(controls.frequency))} px`;
+        sourceCountOutput.textContent = String(sources.filter((source) => !source.muted).length);
+      }
+
+      function propagationSpeed() {
+        return width * 0.19;
+      }
+
+      function resize() {
+        const bounds = stage.getBoundingClientRect();
+        const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+        width = Math.max(1, Math.round(bounds.width));
+        height = Math.max(1, Math.round(bounds.height));
+        canvas.width = Math.round(width * pixelRatio);
+        canvas.height = Math.round(height * pixelRatio);
+        context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+        updateLabels();
+      }
+
+      function drawField() {
+        context.clearRect(0, 0, width, height);
+        context.fillStyle = "#0b1211";
+        context.fillRect(0, 0, width, height);
+        const activeSources = sources.filter((source) => !source.muted && source.amplitude > 0);
+        drawInterferenceLines(activeSources);
+        for (const source of activeSources) drawWavefronts(source);
+        drawSources();
+      }
+
+      function drawWavefronts(source) {
+        const frequency = read(controls.frequency);
+        const omega = Math.PI * 2 * frequency;
+        const wavelength = propagationSpeed() / frequency;
+        const waveNumber = 2 * Math.PI / wavelength;
+        const sourceX = source.x * width;
+        const sourceY = source.y * height;
+        const maxRadius = Math.hypot(width, height);
+
+        for (const isCrest of [true, false]) {
+          const phaseOffset = isCrest ? Math.PI / 2 : -Math.PI / 2;
+          let radius = (omega * elapsed - source.phase * Math.PI / 180 + phaseOffset) / waveNumber;
+          radius += Math.ceil(-radius / wavelength) * wavelength;
+          context.beginPath();
+          for (; radius <= maxRadius; radius += wavelength) {
+            if (radius > 0) {
+              context.moveTo(sourceX + radius, sourceY);
+              context.arc(sourceX, sourceY, radius, 0, Math.PI * 2);
+            }
+          }
+          context.strokeStyle = isCrest ? "#8ee0b0" : "#ff956d";
+          context.globalAlpha = isCrest ? 0.8 : 0.58;
+          context.lineWidth = isCrest ? 1.25 : 1;
+          context.setLineDash(isCrest ? [] : [4, 5]);
+          context.stroke();
+        }
+        context.globalAlpha = 1;
+        context.setLineDash([]);
+      }
+
+      function drawInterferenceLines(activeSources) {
+        if (activeSources.length < 2) return;
+        const maximumAmplitude = activeSources.reduce((total, source) => total + source.amplitude, 0);
+        if (maximumAmplitude === 0) return;
+
+        const step = 8;
+        const columns = Math.ceil(width / step) + 1;
+        const rows = Math.ceil(height / step) + 1;
+        const field = new Float32Array(columns * rows);
+        const waveNumber = 2 * Math.PI * read(controls.frequency) / propagationSpeed();
+
+        for (let gridY = 0; gridY < rows; gridY++) {
+          const y = Math.min(height, gridY * step);
+          for (let gridX = 0; gridX < columns; gridX++) {
+            const x = Math.min(width, gridX * step);
+            let real = 0;
+            let imaginary = 0;
+            for (const source of activeSources) {
+              const distance = Math.hypot(x - source.x * width, y - source.y * height);
+              const phase = waveNumber * distance + source.phase * Math.PI / 180;
+              real += source.amplitude * Math.cos(phase);
+              imaginary += source.amplitude * Math.sin(phase);
+            }
+            field[gridY * columns + gridX] = Math.hypot(real, imaginary);
+          }
+        }
+
+        const levels = [0.1, 0.2, 0.35, 0.5, 0.65, 0.8, 0.95];
+        for (const fraction of levels) {
+          const level = maximumAmplitude * fraction;
+          const isNode = fraction <= 0.2;
+          const isBelly = fraction >= 0.8;
+          context.beginPath();
+          traceContour(field, columns, rows, step, level);
+          context.strokeStyle = isNode ? "#ff956d" : isBelly ? "#8ee0b0" : "#c2d0c6";
+          context.globalAlpha = isNode || isBelly ? 0.82 : 0.34;
+          context.lineWidth = isNode || isBelly ? 1.35 : 0.8;
+          context.setLineDash(isNode ? [2, 3] : []);
+          context.stroke();
+        }
+        context.globalAlpha = 1;
+        context.setLineDash([]);
+      }
+
+      function traceContour(field, columns, rows, step, level) {
+        for (let y = 0; y < rows - 1; y++) {
+          for (let x = 0; x < columns - 1; x++) {
+            const topLeft = field[y * columns + x];
+            const topRight = field[y * columns + x + 1];
+            const bottomRight = field[(y + 1) * columns + x + 1];
+            const bottomLeft = field[(y + 1) * columns + x];
+            const edges = [];
+
+            if ((topLeft < level) !== (topRight < level)) {
+              edges.push([x * step + step * (level - topLeft) / (topRight - topLeft), y * step]);
+            }
+            if ((topRight < level) !== (bottomRight < level)) {
+              edges.push([(x + 1) * step, y * step + step * (level - topRight) / (bottomRight - topRight)]);
+            }
+            if ((bottomRight < level) !== (bottomLeft < level)) {
+              edges.push([(x + 1) * step - step * (level - bottomRight) / (bottomLeft - bottomRight), (y + 1) * step]);
+            }
+            if ((bottomLeft < level) !== (topLeft < level)) {
+              edges.push([x * step, (y + 1) * step - step * (level - bottomLeft) / (topLeft - bottomLeft)]);
+            }
+
+            if (edges.length === 2) {
+              context.moveTo(edges[0][0], edges[0][1]);
+              context.lineTo(edges[1][0], edges[1][1]);
+            } else if (edges.length === 4) {
+              const centerIsHigh = (topLeft + topRight + bottomRight + bottomLeft) / 4 >= level;
+              const pairs = centerIsHigh ? [[0, 1], [2, 3]] : [[0, 3], [1, 2]];
+              for (const [first, second] of pairs) {
+                context.moveTo(edges[first][0], edges[first][1]);
+                context.lineTo(edges[second][0], edges[second][1]);
+              }
+            }
+          }
+        }
+      }
+
+      function drawSources() {
+        context.textAlign = "center";
+        context.textBaseline = "middle";
+        context.font = '12px "SFMono-Regular", Consolas, monospace';
+
+        for (const source of sources) {
+          const x = source.x * width;
+          const y = source.y * height;
+          const color = sourceColor(source);
+          context.beginPath();
+          context.arc(x, y, 8, 0, Math.PI * 2);
+          context.fillStyle = "#101614";
+          context.fill();
+          context.lineWidth = 2;
+          context.strokeStyle = color;
+          context.globalAlpha = source.muted ? 0.35 : 1;
+          context.stroke();
+          context.fillStyle = color;
+          context.fillText(`S${source.id}`, x, y - 19);
+          if (source.muted) {
+            context.beginPath();
+            context.moveTo(x - 5, y + 5);
+            context.lineTo(x + 5, y - 5);
+            context.stroke();
+          }
+        }
+        context.globalAlpha = 1;
+      }
+
+      function createSourceControl(source, property, title, minimum, maximum, step, format) {
+        const row = document.createElement("div");
+        row.className = "slider-row";
+        const label = document.createElement("label");
+        label.className = "slider-label";
+        const input = document.createElement("input");
+        const output = document.createElement("output");
+        const inputId = `source-${source.id}-${property}`;
+        label.htmlFor = inputId;
+        label.append(document.createTextNode(title));
+        output.className = "control-value";
+        output.textContent = format(source[property]);
+        label.append(output);
+        input.id = inputId;
+        input.type = "range";
+        input.min = String(minimum);
+        input.max = String(maximum);
+        input.step = String(step);
+        input.value = String(source[property]);
+        input.addEventListener("input", () => {
+          source[property] = Number(input.value);
+          output.textContent = format(source[property]);
+        });
+        row.append(label, input);
+        return row;
+      }
+
+      function renderSources() {
+        sourceList.replaceChildren();
+        for (const source of sources) {
+          const section = document.createElement("section");
+          section.className = `source${source.muted ? " is-muted" : ""}`;
+          section.style.setProperty("--source-color", sourceColor(source));
+          const heading = document.createElement("div");
+          heading.className = "source-heading";
+          const title = document.createElement("h3");
+          title.className = "source-title";
+          const dot = document.createElement("span");
+          dot.className = "source-dot";
+          dot.setAttribute("aria-hidden", "true");
+          title.append(dot, document.createTextNode(`Quelle ${source.id}`));
+
+          const muteButton = document.createElement("button");
+          muteButton.className = "source-action";
+          muteButton.type = "button";
+          muteButton.textContent = source.muted ? "Aktivieren" : "Stumm";
+          muteButton.setAttribute("aria-pressed", String(source.muted));
+          muteButton.setAttribute("aria-label", source.muted ? `Quelle ${source.id} aktivieren` : `Quelle ${source.id} stummschalten`);
+          muteButton.addEventListener("click", () => {
+            source.muted = !source.muted;
+            renderSources();
+            updateLabels();
+          });
+
+          const removeButton = document.createElement("button");
+          removeButton.className = "source-action remove";
+          removeButton.type = "button";
+          removeButton.textContent = "×";
+          removeButton.setAttribute("aria-label", `Quelle ${source.id} entfernen`);
+          removeButton.addEventListener("click", () => {
+            sources.splice(sources.indexOf(source), 1);
+            renderSources();
+            updateLabels();
+          });
+
+          heading.append(title, muteButton, removeButton);
+          section.append(
+            heading,
+            createSourceControl(source, "amplitude", "Amplitude", 0, 1.5, 0.05, number),
+            createSourceControl(source, "phase", "Phase", -180, 180, 5, (value) => `${value}°`)
+          );
+          sourceList.append(section);
+        }
+      }
+
+      function addSource() {
+        const id = nextSourceId++;
+        const angle = id * 2.399963229728653;
+        const radius = 0.12 + (id % 4) * 0.055;
+        sources.push({
+          id,
+          x: Math.min(0.92, Math.max(0.08, 0.5 + Math.cos(angle) * radius)),
+          y: Math.min(0.9, Math.max(0.1, 0.5 + Math.sin(angle) * radius)),
+          amplitude: 0.8,
+          phase: 0,
+          muted: false
+        });
+        renderSources();
+        updateLabels();
+      }
+
+      function pointerPosition(event) {
+        const bounds = canvas.getBoundingClientRect();
+        return { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
+      }
+
+      function sourceAt(position) {
+        return [...sources].reverse().find((source) =>
+          Math.hypot(position.x - source.x * width, position.y - source.y * height) < 17
+        );
+      }
+
+      function frame(timestamp) {
+        if (previousFrame) {
+          const delta = Math.min((timestamp - previousFrame) / 1000, 0.05);
+          if (playing) elapsed += delta * read(controls.speed);
+        }
+        previousFrame = timestamp;
+        drawField();
+        timeOutput.textContent = `${number(elapsed)} s`;
+        window.requestAnimationFrame(frame);
+      }
+
+      for (const control of Object.values(controls)) {
+        control.addEventListener("input", updateLabels);
+      }
+
+      addSourceButton.addEventListener("click", addSource);
+      canvas.addEventListener("pointerdown", (event) => {
+        if (event.button !== 0) return;
+        draggedSource = sourceAt(pointerPosition(event));
+        if (draggedSource) {
+          canvas.setPointerCapture(event.pointerId);
+          canvas.style.cursor = "grabbing";
+        }
+      });
+      canvas.addEventListener("pointermove", (event) => {
+        const position = pointerPosition(event);
+        if (draggedSource) {
+          draggedSource.x = Math.min(1, Math.max(0, position.x / width));
+          draggedSource.y = Math.min(1, Math.max(0, position.y / height));
+          drawField();
+        } else {
+          canvas.style.cursor = sourceAt(position) ? "grab" : "crosshair";
+        }
+      });
+      canvas.addEventListener("pointerup", () => {
+        draggedSource = null;
+        canvas.style.cursor = "crosshair";
+      });
+      canvas.addEventListener("pointercancel", () => {
+        draggedSource = null;
+        canvas.style.cursor = "crosshair";
+      });
+
+      playButton.addEventListener("click", () => {
+        playing = !playing;
+        playButton.setAttribute("aria-pressed", String(playing));
+        playButton.innerHTML = playing
+          ? '<span class="button-icon" aria-hidden="true">Ⅱ</span><span>Pause</span>'
+          : '<span class="button-icon" aria-hidden="true">▶</span><span>Weiter</span>';
+        stateLabel.textContent = playing ? "Simulation läuft" : "Simulation pausiert";
+      });
+
+      document.querySelector("#reset-button").addEventListener("click", () => {
+        elapsed = 0;
+        drawField();
+        timeOutput.textContent = "0,00 s";
+      });
+
+      renderSources();
+      new ResizeObserver(resize).observe(stage);
+      window.requestAnimationFrame(frame);
+    })();
+  </script>
+</body>
+</html>
