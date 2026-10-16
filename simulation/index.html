@@ -81,6 +81,7 @@
     }
 
     canvas { display: block; width: 100%; height: 100%; }
+    #wave-canvas { cursor: grab; touch-action: none; }
     .stage-label {
       position: absolute;
       top: 15px;
@@ -107,6 +108,32 @@
     .legend .trough, .legend .node { border-color: var(--coral); }
     .legend .trough { border-top-style: dashed; }
     .legend .node { border-top-style: dotted; }
+
+    .measurement-tools { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
+    .measurement-button {
+      min-height: 36px;
+      padding: 0 12px;
+      border: 1px solid #61776a;
+      border-radius: 3px;
+      color: #c6f4d3;
+      background: #202a24;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .measurement-button:hover, .measurement-button[aria-pressed="true"] { background: #2c3a31; }
+    .measurement-button:focus-visible { outline: 2px solid var(--coral); outline-offset: 3px; }
+    .measurement-status { color: var(--muted); font-size: 11px; line-height: 1.4; }
+    .profile-panel { margin-top: 17px; border-top: 1px solid var(--line); }
+    .profile-panel[hidden] { display: none; }
+    .profile-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 0 8px; }
+    .profile-header h2 { margin: 0; font: 16px Georgia, "Times New Roman", serif; }
+    .profile-legend { display: flex; flex-wrap: wrap; gap: 12px; color: var(--muted); font: 10px var(--mono); }
+    .profile-legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .profile-legend i { width: 13px; height: 0; border-top: 2px solid; }
+    .profile-legend .instant { border-color: var(--coral); }
+    .profile-legend .envelope { border-color: var(--mint); }
+    #profile-canvas { width: 100%; height: 180px; }
+    .profile-caption { margin: 0 0 10px; color: var(--muted); font: 10px var(--mono); }
 
     .equation {
       overflow-wrap: anywhere;
@@ -237,6 +264,21 @@
             <span><i class="belly"></i> Bauch</span>
           </div>
         </div>
+        <div class="measurement-tools">
+          <button class="measurement-button" id="measure-button" type="button" aria-pressed="false">╱ Schnittlinie wählen</button>
+          <span class="measurement-status" id="measurement-status" aria-live="polite">Ziehe eine Linie, um das Profil auszulesen.</span>
+        </div>
+        <section class="profile-panel" id="profile-panel" aria-label="Interferenzprofil entlang der Schnittlinie" hidden>
+          <div class="profile-header">
+            <h2>Interferenz entlang der Linie</h2>
+            <div class="profile-legend" aria-label="Diagrammlegende">
+              <span><i class="instant"></i> Auslenkung</span>
+              <span><i class="envelope"></i> Amplitudenhülle</span>
+            </div>
+          </div>
+          <canvas id="profile-canvas" aria-label="Diagramm der Auslenkung und Amplitudenhülle entlang der gewählten Linie"></canvas>
+          <p class="profile-caption" id="profile-caption"></p>
+        </section>
         <p class="equation">u(x,y,t) = ∑ᵢ Aᵢ sin(krᵢ − ωt + φᵢ)</p>
         <div class="readouts" aria-label="Aktuelle Messwerte">
           <div class="readout"><span class="readout-label">Zeit</span><output id="time-value">0,00 s</output></div>
@@ -285,6 +327,12 @@
       const sourceCountOutput = document.querySelector("#source-count");
       const sourceList = document.querySelector("#source-list");
       const addSourceButton = document.querySelector("#add-source");
+      const measureButton = document.querySelector("#measure-button");
+      const measurementStatus = document.querySelector("#measurement-status");
+      const profilePanel = document.querySelector("#profile-panel");
+      const profileCanvas = document.querySelector("#profile-canvas");
+      const profileContext = profileCanvas.getContext("2d");
+      const profileCaption = document.querySelector("#profile-caption");
       const controls = {
         frequency: document.querySelector("#frequency"),
         speed: document.querySelector("#speed")
@@ -302,6 +350,9 @@
       let playing = true;
       let nextSourceId = 3;
       let draggedSource = null;
+      let measurementMode = false;
+      let measurementLine = null;
+      let measurementDraft = null;
 
       const number = (value, digits = 2) => Number(value).toFixed(digits).replace(".", ",");
       const read = (control) => Number(control.value);
@@ -327,6 +378,7 @@
         canvas.height = Math.round(height * pixelRatio);
         context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
         updateLabels();
+        resizeProfile();
       }
 
       function drawField() {
@@ -337,6 +389,7 @@
         drawInterferenceLines(activeSources);
         for (const source of activeSources) drawWavefronts(source);
         drawSources();
+        drawMeasurementLine();
       }
 
       function drawWavefronts(source) {
@@ -479,6 +532,127 @@
         context.globalAlpha = 1;
       }
 
+      function drawMeasurementLine() {
+        const line = measurementDraft || measurementLine;
+        if (!line) return;
+        context.beginPath();
+        context.moveTo(line.start.x, line.start.y);
+        context.lineTo(line.end.x, line.end.y);
+        context.strokeStyle = "#fff1a8";
+        context.lineWidth = 2;
+        context.setLineDash([7, 5]);
+        context.stroke();
+        context.setLineDash([]);
+        for (const point of [line.start, line.end]) {
+          context.beginPath();
+          context.arc(point.x, point.y, 4, 0, Math.PI * 2);
+          context.fillStyle = "#fff1a8";
+          context.fill();
+        }
+      }
+
+      function resizeProfile() {
+        const bounds = profileCanvas.getBoundingClientRect();
+        if (!bounds.width || !bounds.height) return;
+        const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+        profileCanvas.width = Math.round(bounds.width * pixelRatio);
+        profileCanvas.height = Math.round(bounds.height * pixelRatio);
+        profileContext.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+      }
+
+      function drawProfile() {
+        if (!measurementLine || profilePanel.hidden) return;
+        const bounds = profileCanvas.getBoundingClientRect();
+        const plotWidth = bounds.width;
+        const plotHeight = bounds.height;
+        if (!plotWidth || !plotHeight) return;
+
+        const left = 38;
+        const right = plotWidth - 12;
+        const top = 12;
+        const bottom = plotHeight - 25;
+        const center = (top + bottom) / 2;
+        const halfHeight = (bottom - top) / 2;
+        const activeSources = sources.filter((source) => !source.muted && source.amplitude > 0);
+        const maximumAmplitude = activeSources.reduce((total, source) => total + source.amplitude, 0) || 1;
+        const waveNumber = 2 * Math.PI * read(controls.frequency) / propagationSpeed();
+        const omega = 2 * Math.PI * read(controls.frequency);
+        const deltaX = measurementLine.end.x - measurementLine.start.x;
+        const deltaY = measurementLine.end.y - measurementLine.start.y;
+        const lineLength = Math.hypot(deltaX, deltaY);
+        const sampleCount = Math.min(900, Math.max(120, Math.ceil(lineLength * 1.5)));
+        const envelope = [];
+        const displacement = [];
+
+        profileContext.clearRect(0, 0, plotWidth, plotHeight);
+        profileContext.font = '10px "SFMono-Regular", Consolas, monospace';
+        profileContext.textAlign = "right";
+        profileContext.textBaseline = "middle";
+        profileContext.strokeStyle = "#34413a";
+        profileContext.lineWidth = 1;
+        for (const fraction of [0, 0.5, 1]) {
+          const y = bottom - (bottom - top) * fraction;
+          profileContext.beginPath();
+          profileContext.moveTo(left, y);
+          profileContext.lineTo(right, y);
+          profileContext.stroke();
+          profileContext.fillStyle = "#a5b0a8";
+          profileContext.fillText(number((fraction - 0.5) * 2 * maximumAmplitude), left - 7, y);
+        }
+        profileContext.fillStyle = "#a5b0a8";
+        profileContext.textAlign = "left";
+        profileContext.textBaseline = "top";
+        profileContext.fillText("s (px)", left, bottom + 7);
+        profileContext.textAlign = "right";
+        profileContext.fillText(`${number(lineLength, 0)} px`, right, bottom + 7);
+
+        for (let index = 0; index <= sampleCount; index++) {
+          const progress = index / sampleCount;
+          const x = measurementLine.start.x + deltaX * progress;
+          const y = measurementLine.start.y + deltaY * progress;
+          let real = 0;
+          let imaginary = 0;
+          let instant = 0;
+          for (const source of activeSources) {
+            const distance = Math.hypot(x - source.x * width, y - source.y * height);
+            const phase = waveNumber * distance + source.phase * Math.PI / 180;
+            real += source.amplitude * Math.cos(phase);
+            imaginary += source.amplitude * Math.sin(phase);
+            instant += source.amplitude * Math.sin(phase - omega * elapsed);
+          }
+          const screenX = left + progress * (right - left);
+          envelope.push({ x: screenX, upper: center - Math.hypot(real, imaginary) / maximumAmplitude * halfHeight, lower: center + Math.hypot(real, imaginary) / maximumAmplitude * halfHeight });
+          displacement.push({ x: screenX, y: center - instant / maximumAmplitude * halfHeight });
+        }
+
+        profileContext.beginPath();
+        profileContext.moveTo(envelope[0].x, envelope[0].upper);
+        for (const point of envelope) profileContext.lineTo(point.x, point.upper);
+        for (let index = envelope.length - 1; index >= 0; index--) profileContext.lineTo(envelope[index].x, envelope[index].lower);
+        profileContext.closePath();
+        profileContext.fillStyle = "rgba(142, 224, 176, 0.08)";
+        profileContext.fill();
+
+        profileContext.beginPath();
+        profileContext.moveTo(envelope[0].x, envelope[0].upper);
+        for (const point of envelope) profileContext.lineTo(point.x, point.upper);
+        profileContext.strokeStyle = "#8ee0b0";
+        profileContext.lineWidth = 1.5;
+        profileContext.stroke();
+        profileContext.beginPath();
+        profileContext.moveTo(envelope[0].x, envelope[0].lower);
+        for (const point of envelope) profileContext.lineTo(point.x, point.lower);
+        profileContext.stroke();
+
+        profileContext.beginPath();
+        profileContext.moveTo(displacement[0].x, displacement[0].y);
+        for (const point of displacement) profileContext.lineTo(point.x, point.y);
+        profileContext.strokeStyle = "#ff956d";
+        profileContext.lineWidth = 1.75;
+        profileContext.stroke();
+        profileCaption.textContent = `Linienlänge: ${number(lineLength, 0)} px · Auslenkung in Echtzeit, Hülle zeigt die resultierende Amplitude.`;
+      }
+
       function createSourceControl(source, property, title, minimum, maximum, step, format) {
         const row = document.createElement("div");
         row.className = "slider-row";
@@ -588,6 +762,7 @@
         }
         previousFrame = timestamp;
         drawField();
+        drawProfile();
         timeOutput.textContent = `${number(elapsed)} s`;
         window.requestAnimationFrame(frame);
       }
@@ -597,8 +772,23 @@
       }
 
       addSourceButton.addEventListener("click", addSource);
+      measureButton.addEventListener("click", () => {
+        measurementMode = !measurementMode;
+        measureButton.setAttribute("aria-pressed", String(measurementMode));
+        canvas.style.cursor = measurementMode ? "crosshair" : "grab";
+        measurementStatus.textContent = measurementMode
+          ? "Ziehe die gewünschte Schnittlinie im Wellenfeld."
+          : measurementLine ? "Schnittlinie aktiv. Erneut wählen, um sie zu ändern." : "Ziehe eine Linie, um das Profil auszulesen.";
+      });
       canvas.addEventListener("pointerdown", (event) => {
         if (event.button !== 0) return;
+        if (measurementMode) {
+          const position = pointerPosition(event);
+          measurementDraft = { start: position, end: position };
+          canvas.setPointerCapture(event.pointerId);
+          drawField();
+          return;
+        }
         draggedSource = sourceAt(pointerPosition(event));
         if (draggedSource) {
           canvas.setPointerCapture(event.pointerId);
@@ -607,7 +797,10 @@
       });
       canvas.addEventListener("pointermove", (event) => {
         const position = pointerPosition(event);
-        if (draggedSource) {
+        if (measurementDraft) {
+          measurementDraft.end = position;
+          drawField();
+        } else if (draggedSource) {
           draggedSource.x = Math.min(1, Math.max(0, position.x / width));
           draggedSource.y = Math.min(1, Math.max(0, position.y / height));
           drawField();
@@ -615,13 +808,27 @@
           canvas.style.cursor = sourceAt(position) ? "grab" : "crosshair";
         }
       });
-      canvas.addEventListener("pointerup", () => {
+      canvas.addEventListener("pointerup", (event) => {
+        if (measurementDraft) {
+          measurementDraft.end = pointerPosition(event);
+          measurementLine = measurementDraft;
+          measurementDraft = null;
+          measurementMode = false;
+          measureButton.setAttribute("aria-pressed", "false");
+          canvas.style.cursor = "grab";
+          profilePanel.hidden = false;
+          measurementStatus.textContent = "Schnittlinie aktiv. Erneut wählen, um sie zu ändern.";
+          resizeProfile();
+          drawField();
+          drawProfile();
+        }
         draggedSource = null;
-        canvas.style.cursor = "crosshair";
+        if (!measurementMode) canvas.style.cursor = "grab";
       });
       canvas.addEventListener("pointercancel", () => {
         draggedSource = null;
-        canvas.style.cursor = "crosshair";
+        measurementDraft = null;
+        canvas.style.cursor = measurementMode ? "crosshair" : "grab";
       });
 
       playButton.addEventListener("click", () => {
@@ -641,6 +848,7 @@
 
       renderSources();
       new ResizeObserver(resize).observe(stage);
+      new ResizeObserver(resizeProfile).observe(profileCanvas);
       window.requestAnimationFrame(frame);
     })();
   </script>
